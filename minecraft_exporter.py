@@ -14,10 +14,11 @@ from prometheus_client import Metric, REGISTRY, start_http_server
 
 class MinecraftCollector(object):
     def __init__(self):
-        self.stats_directory = "/world/stats"
-        self.player_directory = "/world/playerdata"
-        self.advancements_directory = "/world/advancements"
-        self.better_questing = "/world/betterquesting"
+        self.world_directory = os.environ.get("WORLD_DIRECTORY", "/world")
+        self.stats_directory = self.world_directory + "/stats"
+        self.player_directory = self.world_directory + "/playerdata"
+        self.advancements_directory = self.world_directory + "/advancements"
+        self.better_questing = self.world_directory + "/betterquesting"
         self.player_map = dict()
         self.quests_enabled = False
 
@@ -33,6 +34,8 @@ class MinecraftCollector(object):
         schedule.every().day.at("01:00").do(self.flush_playernamecache)
 
     def get_players(self):
+        if not os.path.isdir(self.stats_directory):
+            return []
         return [f[:-5] for f in listdir(self.stats_directory) if isfile(join(self.stats_directory, f))]
 
     def flush_playernamecache(self):
