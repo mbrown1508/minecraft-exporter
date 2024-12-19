@@ -25,7 +25,9 @@ class MinecraftCollector(object):
         self.rcon = None
         self.rcon_connected = False
         if all(x in os.environ for x in ['RCON_HOST', 'RCON_PASSWORD']):
-            self.rcon = Client(os.environ['RCON_HOST'], int(os.environ['RCON_PORT']),passwd=os.environ['RCON_PASSWORD'])
+            self.rcon = Client(os.environ['RCON_HOST'],
+                               int(os.environ['RCON_PORT']),
+                               passwd=os.environ['RCON_PASSWORD'])
             print("RCON is enabled for " + os.environ['RCON_HOST'])
 
         if os.path.isdir(self.better_questing):
@@ -49,13 +51,13 @@ class MinecraftCollector(object):
             try:
                 result = requests.get('https://sessionserver.mojang.com/session/minecraft/profile/' + uuid)
                 self.player_map[uuid] = result.json()['name']
-                return (result.json()['name'])
+                return result.json()['name']
             except:
                 return
 
     def rcon_connect(self):
         try:
-            self.rcon.__enter__() # https://github.com/conqp/mcipc/issues/16
+            self.rcon.__enter__()  # https://github.com/conqp/mcipc/issues/16
             self.rcon_connected = True
             print("Successfully connected to RCON")
             return True
@@ -71,17 +73,17 @@ class MinecraftCollector(object):
     def rcon_command(self, command):
         try:
             response = self.rcon.run(command)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            print("Lost RCON Connection")
+            self.rcon_disconnect()
+            response = None
         except Exception as e:
             response = None
             if e == "Connection timeout error":
                 print("Lost RCON Connection")
                 self.rcon_disconnect()
             else:
-                print("RCON command failed:",e)
-        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
-            print("Lost RCON Connection")
-            self.rcon_disconnect()
-            response = None
+                print("RCON command failed:", e)
 
         return response
 
@@ -105,7 +107,7 @@ class MinecraftCollector(object):
             [dim_tps, dim_ticktime, overall_tps, overall_ticktime, player_online, entities, tps_1m, tps_5m, tps_15m])
         if 'PAPER_SERVER' in os.environ and os.environ['PAPER_SERVER'] == "True":
             resp = str(self.rcon_command("tps")).strip().replace("§a", "")
-            tpsregex = re.compile("TPS from last 1m, 5m, 15m: (\d*\.\d*), (\d*\.\d*), (\d*\.\d*)")
+            tpsregex = re.compile(r"TPS from last 1m, 5m, 15m: (\d*.\d*), (\d*.\d*), (\d*.\d*)")
             for m1, m5, m15 in tpsregex.findall(resp):
                 tps_1m.add_sample('paper_tps_1m', value=m1, labels={'tps': '1m'})
                 tps_5m.add_sample('paper_tps_5m', value=m5, labels={'tps': '5m'})
@@ -113,18 +115,18 @@ class MinecraftCollector(object):
         if 'FORGE_SERVER' in os.environ and os.environ['FORGE_SERVER'] == "True":
             # dimensions
             resp = self.rcon_command("forge tps")
-            dimtpsregex = re.compile("Dim (.*?)\s\((.*?)\):\sMean tick time:\s(.*?) ms\. Mean TPS: (\d*\.\d*)")
+            dimtpsregex = re.compile(r"Dim (.*?)\s((.*?)):\sMean tick time:\s(.*?) ms. Mean TPS: (\d*.\d*)")
             for dimid, dimname, meanticktime, meantps in dimtpsregex.findall(resp):
                 dim_tps.add_sample('dim_tps', value=meantps, labels={'dimension_id': dimid, 'dimension_name': dimname})
                 dim_ticktime.add_sample('dim_ticktime', value=meanticktime,
                                         labels={'dimension_id': dimid, 'dimension_name': dimname})
-            overallregex = re.compile("Overall\s?: Mean tick time: (.*) ms. Mean TPS: (.*)")
+            overallregex = re.compile(r"Overall\s?: Mean tick time: (.*) ms. Mean TPS: (.*)")
             overall_tps.add_sample('overall_tps', value=overallregex.findall(resp)[0][1], labels={})
             overall_ticktime.add_sample('overall_ticktime', value=overallregex.findall(resp)[0][0], labels={})
 
             # entites
             resp = self.rcon_command("forge entity list")
-            entityregex = re.compile("(\d+): (.*?:.*?)\s")
+            entityregex = re.compile(r"(\d+): (.*?:.*?)\s")
             for entitycount, entityname in entityregex.findall(resp):
                 entities.add_sample('entities', value=entitycount, labels={'entity': entityname})
 
@@ -141,7 +143,7 @@ class MinecraftCollector(object):
 
             resp = self.rcon_command("dynmap stats")
 
-            dynmaptilerenderregex = re.compile("  (.*?): processed=(\d*), rendered=(\d*), updated=(\d*)")
+            dynmaptilerenderregex = re.compile(r"  (.*?): processed=(\d*), rendered=(\d*), updated=(\d*)")
             for dim, processed, rendered, updated in dynmaptilerenderregex.findall(resp):
                 dynmap_tile_render_statistics.add_sample('dynmap_tile_render_statistics', value=processed,
                                                          labels={'type': 'processed', 'file': dim})
@@ -150,7 +152,7 @@ class MinecraftCollector(object):
                 dynmap_tile_render_statistics.add_sample('dynmap_tile_render_statistics', value=updated,
                                                          labels={'type': 'updated', 'file': dim})
 
-            dynmapchunkloadingregex = re.compile("Chunks processed: (.*?): count=(\d*), (\d*.\d*)")
+            dynmapchunkloadingregex = re.compile(r"Chunks processed: (.*?): count=(\d*), (\d*.\d*)")
             for state, count, duration_per_chunk in dynmapchunkloadingregex.findall(resp):
                 dynmap_chunk_loading_statistics_count.add_sample('dynmap_chunk_loading_statistics', value=count,
                                                                  labels={'type': state})
@@ -159,7 +161,7 @@ class MinecraftCollector(object):
 
         # player
         resp = self.rcon_command("list")
-        playerregex = re.compile("players online:(.*)")
+        playerregex = re.compile(r"players online:(.*)")
         if playerregex.findall(resp):
             for player in playerregex.findall(resp)[0].split(","):
                 if not player.isspace():
@@ -192,9 +194,9 @@ class MinecraftCollector(object):
             count = 0
             advancements = json.load(json_file)
             for key, value in advancements.items():
-                if key in ("DataVersion"):
+                if key in "DataVersion":
                     continue
-                if value["done"] == True:
+                if value["done"]:
                     count += 1
         data["stat.advancements"] = count
         if self.quests_enabled:
@@ -324,11 +326,11 @@ class MinecraftCollector(object):
                 elif stat == "minecraft:damage_taken":
                     damage_taken.add_sample('damage_taken', value=value, labels={'player': name})
                 elif stat == "minecraft:damage_dealt":
-                    damage_dealt.add_sample('damage_dealt',value=value,labels={'player':name})
+                    damage_dealt.add_sample('damage_dealt', value=value, labels={'player': name})
                 elif stat == "minecraft:play_time":
-                    player_playtime.add_sample('player_playtime',value=value,labels={'player':name})
-                elif stat == "minecraft:play_one_minute": # pre 1.17
-                    player_playtime.add_sample('player_playtime',value=value,labels={'player':name})
+                    player_playtime.add_sample('player_playtime', value=value, labels={'player': name})
+                elif stat == "minecraft:play_one_minute":  # pre 1.17
+                    player_playtime.add_sample('player_playtime', value=value, labels={'player': name})
                 elif stat == "minecraft:walk_one_cm":
                     cm_traveled.add_sample("cm_traveled", value=value, labels={'player': name, 'method': "walking"})
                 elif stat == "minecraft:walk_on_water_one_cm":
@@ -384,5 +386,5 @@ if __name__ == '__main__':
     print(f'Exporter started on Port {HTTP_PORT}')
 
     while True:
-            time.sleep(1)
-            schedule.run_pending()
+        time.sleep(1)
+        schedule.run_pending()
